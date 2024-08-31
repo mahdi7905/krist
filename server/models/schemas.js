@@ -1,38 +1,49 @@
 const mongoose = require("mongoose");
 const bcrypt = require("bcrypt");
-const { isStrongPassword } = require("validator");
+const { isStrongPassword, isEmail, isMobilePhone } = require("validator");
 
 const Schema = mongoose.Schema;
 
 const UserSchema = new Schema({
+  firstName: {
+    type: String,
+    required: [true, "First name is required"],
+  },
+  lastName: {
+    type: String,
+    required: [true, "Last name is required"],
+  },
   username: {
     type: String,
     unique: true,
     required: [true, "Username is required"],
   },
+  phone: {
+    type: Number,
+    validator: [isMobilePhone, "Invalid Phone Number"],
+  },
+  email: {
+    type: String,
+    unique: true,
+    validate: [isEmail, "Invalid email address"],
+    required: [true, "Username is required"],
+  },
+  coutry: {
+    type: String,
+  },
+  city: {
+    type: String,
+  },
+  shippingAddress: {
+    type: String,
+  },
+  zipCode: {
+    type: String,
+  },
   password: {
     type: String,
     required: [true, "Password is required"],
     validate: [isStrongPassword, "Password is too weak"],
-  },
-  role: {
-    type: String,
-    required: [true, "User Must be assigned a role"],
-    default: "consumer",
-  },
-});
-const ProductSchema = new Schema({
-  type: {
-    type: String,
-  },
-  price: {
-    type: Number,
-  },
-  size: {
-    type: Number,
-  },
-  media: {
-    type: String,
   },
 });
 const CartSchema = new Schema({
@@ -41,10 +52,9 @@ const CartSchema = new Schema({
     required: true,
     ref: "User",
   },
-  item: {
-    type: mongoose.SchemaTypes.ObjectId,
+  items: {
+    type: [String],
     required: true,
-    ref: "Product",
   },
 });
 const FavoriteSchema = new Schema({
@@ -53,10 +63,9 @@ const FavoriteSchema = new Schema({
     required: true,
     ref: "User",
   },
-  item: {
-    type: mongoose.SchemaTypes.ObjectId,
+  items: {
+    type: [String],
     required: true,
-    ref: "Product",
   },
 });
 const OrderSchema = new Schema(
@@ -67,9 +76,15 @@ const OrderSchema = new Schema(
       ref: "User",
     },
     products: {
-      type: [mongoose.SchemaTypes.ObjectId],
+      type: [
+        {
+          id: String,
+          name: String,
+          price: Number,
+          media: String,
+        },
+      ],
       required: true,
-      ref: "Product",
     },
     amount: {
       type: Number,
@@ -98,37 +113,66 @@ const OrderSchema = new Schema(
   { timestamps: true }
 );
 
-UserSchema.statics.register = async function (username, password, role) {
-  const exist = await this.findOne({ username });
-  if (exist) {
-    console.log(exist._id);
+UserSchema.statics.register = async function (
+  firstName,
+  lastName,
+  username,
+  phone,
+  email,
+  coutry,
+  city,
+  shippingAddress,
+  zipCode,
+  password
+) {
+  const usernameExist = await this.findOne({ username });
+  if (usernameExist) {
     throw new Error("Username already in use");
+  }
+  const emailExist = await this.findOne({ email });
+  if (emailExist) {
+    throw new Error("Email already in use");
   }
   const salt = await bcrypt.genSalt(10);
   const hashed = await bcrypt.hash(password, salt);
   const user = await this.create({
+    firstName,
+    lastName,
     username,
+    phone,
+    email,
+    coutry,
+    city,
+    shippingAddress,
+    zipCode,
     password: hashed,
-    role,
   });
   return user;
 };
-UserSchema.statics.login = async function (username, password) {
+UserSchema.statics.login = async function (username, email, password) {
   const user = await this.findOne({ username });
-  if (user) {
-    const matchingPass = await bcrypt.compare(password, user.password);
+  const emailUser = await this.findOne({ email });
+  if (user || emailUser) {
+    const matchingPass = await bcrypt.compare(
+      password,
+      user.password || emailUser.password
+    );
     console.log(matchingPass);
     if (matchingPass) {
       return user;
     }
     throw new Error("Password Incorrect");
   }
-  throw new Error("User could not be found");
+  if (!user) {
+    throw new Error("User could not be found");
+  }
+  if (!emailUser) {
+    throw new Error(" User with this email not found");
+  }
 };
 
 const User = mongoose.model("User", UserSchema);
-const Product = mongoose.model("Product", ProductSchema);
 const Cart = mongoose.model("Cart", CartSchema);
 const Favorite = mongoose.model("Favorite", FavoriteSchema);
 const Order = mongoose.model("Order", OrderSchema);
-module.exports = { User, Product, Cart, Favorite, Order };
+module.exports = { User, Cart, Favorite, Order };
